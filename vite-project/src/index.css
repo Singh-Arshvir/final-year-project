@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold: #b38b1f; /* Muted Bronze Gold */
+  --color-ink: #1a1d1f;  /* Deep Graphite */
+  --color-paper: #fbfbfb; /* Clean Architectural White */
+  --color-paper-dim: #f2f2f2;
+  
+  --animate-fade-up: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-mask-reveal: maskReveal 1.2s cubic-bezier(0.83, 0, 0.17, 1) forwards;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes maskReveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@layer base {
+  body {
+    @apply bg-paper text-ink antialiased overflow-x-hidden p-0 m-0 font-sans leading-relaxed;
+  }
+
+  ::selection {
+    @apply bg-ink text-white;
+  }
+}
+
+/* Custom Cursor - Minimalist Ink */
+#cursor {
+  @apply fixed w-3 h-3 bg-ink rounded-full pointer-events-none z-[9999] transition-transform duration-300 ease-out;
+}
+
+/* Horizontal Scroll Hint */
+.horizontal-scroll-hint {
+  @apply fixed bottom-10 left-[10%] text-[8px] uppercase tracking-[0.5em] text-ink/20 transform -rotate-90 origin-left;
+}

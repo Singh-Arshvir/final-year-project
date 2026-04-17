@@ -1,0 +1,247 @@
+import React, { useState, useEffect } from 'react' // React primitives for state and lifecycle
+import axios from 'axios' // Networking library for making API requests to your backend
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api' // The base URL for your Shahi Architects backend server
+
+export default function Admin() {
+    // STATE: Controlling what the admin sees
+    const [token, setToken] = useState(localStorage.getItem('shahi_token')) // Persisted login 'passport'
+    const [userRole, setUserRole] = useState(localStorage.getItem('shahi_role')) // User role from login
+    const [email, setEmail] = useState('') // Login email intake
+    const [password, setPassword] = useState('') // Login password intake
+    const [view, setView] = useState('projects') // View toggle: 'projects' or 'inquiries'
+    const [data, setData] = useState([]) // Container for projects or enquiries fetched from DB
+    const [loading, setLoading] = useState(false) // Spinner state for when data is being fetched
+
+    // STATE: For adding a brand new project
+    const [newProject, setNewProject] = useState({ name: '', location: '', image: '', id: '' })
+
+    // LIFECYCLE: Automatically fetch data whenever the view (Projects/Inquiries) changes
+    useEffect(() => {
+        if (token && userRole === 'admin') {
+            fetchData()
+        }
+    }, [token, view, userRole])
+
+    // THE FETCH ENGINE: Pulls live data from your MongoDB cluster via the Backend API
+    const fetchData = async () => {
+        setLoading(true)
+        try {
+            const endpoint = view === 'projects' ? '/projects' : '/inquiries'
+            const res = await axios.get(`${API}${endpoint}`, {
+                headers: { Authorization: `Bearer ${token}` } // Passing the JWT Token for security
+            })
+            setData(res.data) // Updating the dashboard with real items
+        } catch (err) {
+            console.error(err)
+            if (err.response?.status === 401 || err.response?.status === 403) handleLogout() // Force logout if access is denied
+        }
+        setLoading(false)
+    }
+
+    // LOGIN ACTION: Exchanges credentials for a 24-hour Authorization Token and User Role
+    const handleLogin = async (e) => {
+        e.preventDefault()
+        try {
+            const res = await axios.post(`${API}/auth/login`, { email, password })
+            const { token, user } = res.data
+            
+            // SECURITY CHECK: Immediately reject if the user is not an admin
+            if (user.role !== 'admin') {
+                alert('ACCESS DENIED: You do not have permission to access the administrative panel.')
+                return
+            }
+
+            localStorage.setItem('shahi_token', token) // Saving the token
+            localStorage.setItem('shahi_role', user.role) // Saving the role
+            
+            setToken(token) 
+            setUserRole(user.role)
+        } catch (err) {
+            alert('Security Error: ' + (err.response?.data?.message || 'Check your credentials.'))
+        }
+    }
+
+    // LOGOUT ACTION: Wipes all session data
+    const handleLogout = () => {
+        localStorage.removeItem('shahi_token')
+        localStorage.removeItem('shahi_role')
+        setToken(null)
+        setUserRole(null)
+    }
+
+    // ADD PROJECT: Sends new architectural data to your database
+    const handleAddProject = async (e) => {
+        e.preventDefault()
+        try {
+            await axios.post(`${API}/projects`, newProject, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setNewProject({ name: '', location: '', image: '', id: '' }) // Resetting the form
+            fetchData() 
+        } catch (err) {
+            alert('Drafting Error: Failed to publish project.')
+        }
+    }
+
+    // DELETE ACTION: Removes projects or inquiries from the database permenantly
+    const handleDelete = async (id) => {
+        if (!window.confirm('IRREVERSIBLE: Confirmed deletion from Database?')) return
+        try {
+            const endpoint = view === 'projects' ? '/projects' : '/inquiries'
+            await axios.delete(`${API}${endpoint}/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            fetchData() 
+        } catch (err) {
+            alert('Process Error: Delete Failed')
+        }
+    }
+
+    // CONDITIONAL RENDER: If not logged in, show the minimalist login gate
+    if (!token) {
+        return (
+            <div className="min-h-screen bg-paper flex items-center justify-center p-6 sm:p-12">
+                <div className="w-full max-w-sm border border-ink/5 p-8 sm:p-12 bg-white shadow-2xl relative">
+                    <div className="absolute top-0 left-0 w-full h-[2px] bg-gold"></div>
+                    <h2 className="text-xl font-bold uppercase tracking-[0.4em] mb-12 text-ink text-center underline decoration-gold/20 underline-offset-8">Admin Access</h2>
+                    <form onSubmit={handleLogin} className="flex flex-col gap-8">
+                        <input 
+                            type="email" 
+                            placeholder="EMAIL" 
+                            className="bg-transparent border-b border-ink/10 py-3 text-xs font-bold tracking-widest outline-none focus:border-gold transition-colors"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
+                        <input 
+                            type="password" 
+                            placeholder="PASSWORD" 
+                            className="bg-transparent border-b border-ink/10 py-3 text-xs font-bold tracking-widest outline-none focus:border-gold transition-colors"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
+                        <button className="bg-ink text-white py-4 font-bold uppercase text-[9px] tracking-[0.5em] hover:bg-gold transition-all duration-500 shadow-lg">
+                            Enter Dashboard
+                        </button>
+                    </form>
+                </div>
+            </div>
+        )
+    }
+
+    // SECURITY FALLBACK: If a token exists but the role is wrong, block the view
+    if (userRole !== 'admin') {
+        return (
+            <div className="min-h-screen bg-paper flex items-center justify-center">
+                <div className="text-center p-20 border border-ink/5 bg-white shadow-xl">
+                    <h1 className="text-xl font-bold uppercase tracking-[0.5em] text-red-500 mb-6">Restricted Access</h1>
+                    <p className="text-[10px] font-bold tracking-widest text-ink/40 uppercase mb-10">You do not have the necessary permissions to view this system.</p>
+                    <button onClick={handleLogout} className="px-8 py-3 bg-ink text-white text-[9px] font-bold uppercase tracking-widest">Return to Safety</button>
+                </div>
+            </div>
+        )
+    }
+
+    // MAIN RENDER: The Architectural Command Centre (Admin Only)
+    return (
+        <div className="min-h-screen bg-paper flex flex-col selection:bg-gold selection:text-white">
+            {/* NAVIGATION HEADER */}
+            <div className="flex flex-col sm:flex-row justify-between items-center px-6 sm:px-12 py-6 sm:py-8 border-b border-ink/5 bg-white gap-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
+                    <h1 className="text-[10px] font-bold tracking-[0.6em] uppercase text-ink underline decoration-gold underline-offset-4 select-none">Admin / Shahi Studio</h1>
+                    <div className="flex gap-8">
+                        <button 
+                            onClick={() => setView('projects')}
+                            className={`text-[9px] font-bold tracking-[0.2em] uppercase transition-all ${view === 'projects' ? 'text-ink border-b-2 border-gold pb-1' : 'text-ink/30'}`}
+                        >
+                            Global Works
+                        </button>
+                        <button 
+                            onClick={() => setView('inquiries')}
+                            className={`text-[9px] font-bold tracking-[0.2em] uppercase transition-all ${view === 'inquiries' ? 'text-ink border-b-2 border-gold pb-1' : 'text-ink/30'}`}
+                        >
+                            Client Inquiries
+                        </button>
+                    </div>
+                </div>
+                <button onClick={handleLogout} className="text-[9px] font-bold tracking-widest uppercase text-ink/40 hover:text-red-500 transition-colors">Terminate Session</button>
+            </div>
+
+            <main className="p-6 sm:p-12 flex-1">
+                {view === 'projects' ? (
+                    <div className="max-w-6xl mx-auto">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                            {/* PROJECT FORM: Interactive drafting form */}
+                            <div className="lg:col-span-4 border border-ink/5 p-8 sm:p-10 bg-white shadow-sm h-fit sticky top-12">
+                                <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase mb-8 border-b border-ink/5 pb-4">Add New Project</h3>
+                                <form onSubmit={handleAddProject} className="flex flex-col gap-6">
+                                    <input type="text" placeholder="ID (e.g. 05)" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.id} onChange={e => setNewProject({...newProject, id: e.target.value})} />
+                                    <input type="text" placeholder="NAME" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} />
+                                    <input type="text" placeholder="LOCATION" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.location} onChange={e => setNewProject({...newProject, location: e.target.value})} />
+                                    <input type="text" placeholder="IMAGE URL" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.image} onChange={e => setNewProject({...newProject, image: e.target.value})} />
+                                    <button className="bg-ink text-white py-4 text-[9px] font-bold uppercase tracking-[0.5em] mt-4 hover:bg-gold transition-all duration-500">Publish to Live Gallery</button>
+                                </form>
+                            </div>
+
+                            {/* PROJECT LIST: Real-time mirror of the website gallery */}
+                            <div className="lg:col-span-8 space-y-4">
+                                {loading ? <div className="text-[9px] uppercase font-mono animate-pulse text-ink/30">Synchronizing Local Data...</div> : (
+                                    data.map(p => (
+                                        <div key={p._id} className="flex flex-col sm:flex-row justify-between items-center p-6 border border-ink/5 bg-white group hover:border-gold transition-all duration-500 gap-6 shadow-sm">
+                                            <div className="flex gap-6 items-center w-full">
+                                                <img src={p.image} className="w-16 h-16 object-cover bg-paper grayscale border border-ink/5 transition-all group-hover:grayscale-0" alt={p.name} />
+                                                <div>
+                                                    <span className="text-[8px] font-mono text-ink/40 uppercase tracking-widest">{p.id} / ARCHIVE</span>
+                                                    <h4 className="text-xs font-bold uppercase tracking-widest text-ink">{p.name}</h4>
+                                                    <p className="text-[9px] text-ink/40 uppercase font-bold tracking-tighter">{p.location}</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => handleDelete(p._id)} className="sm:opacity-0 group-hover:opacity-100 text-[9px] font-bold text-red-500/50 hover:text-red-500 uppercase tracking-widest transition-all">Remove</button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="max-w-6xl mx-auto bg-white border border-ink/5 shadow-sm overflow-hidden">
+                        {/* INQUIRY VIEWER: Precision table for lead monitoring */}
+                        <div className="p-8 border-b border-ink/5 flex justify-between items-center bg-paper-dim/30">
+                            <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase text-ink">Inbound Client Leads</h3>
+                            <span className="text-[9px] font-mono text-ink/40 uppercase font-bold">({data.length} Submissions Logged)</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left min-w-[600px]">
+                                <thead className="text-[8px] font-bold uppercase tracking-[0.5em] text-ink/40 bg-paper-dim/10">
+                                    <tr>
+                                        <th className="p-6">Client Identity</th>
+                                        <th className="p-6">Program</th>
+                                        <th className="p-6">Vision</th>
+                                        <th className="p-6">Log Date</th>
+                                        <th className="p-6 text-right">Delete</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-[10px] text-ink/80 divide-y divide-ink/5 font-medium">
+                                    {data.map(i => (
+                                        <tr key={i._id} className="hover:bg-paper-dim/10 transition-colors">
+                                            <td className="p-6">
+                                                <div className="font-bold uppercase tracking-widest text-ink">{i.name}</div>
+                                                <div className="text-[8px] lowercase text-ink/40 font-mono tracking-tighter">{i.email}</div>
+                                            </td>
+                                            <td className="p-6 font-bold uppercase tracking-tighter text-ink/60">{i.projectType}</td>
+                                            <td className="p-6 max-w-xs truncate opacity-70 italic text-[9px]">{i.message}</td>
+                                            <td className="p-6 font-mono opacity-50 text-[8px]">{new Date(i.createdAt).toLocaleDateString()}</td>
+                                            <td className="p-6 text-right">
+                                                <button onClick={() => handleDelete(i._id)} className="text-red-500/40 hover:text-red-500 font-bold uppercase tracking-widest transition-colors">Remove Record</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </main>
+        </div>
+    )
+}
