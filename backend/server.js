@@ -63,6 +63,13 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'active', timestamp: new Date() })
 })
 
+// DEBUG IP: Visit this to see what IP the server detects for you
+app.get('/api/auth/debug-ip', (req, res) => {
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress
+    const cleanIp = clientIp.replace('::ffff:', '')
+    res.send(`YOUR DETECTED IP IS: ${cleanIp}`)
+})
+
 /* ---------------- DATA MODELS ---------------- */
 // Blueprint for an Admin User (Email and Password)
 const userSchema = new mongoose.Schema({
