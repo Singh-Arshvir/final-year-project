@@ -32,11 +32,31 @@ app.use(express.json()) // Middleware: allows the server to read incoming JSON d
 // 1. DATABASE & SECURITY
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/shahi_architects'
 const JWT_SECRET = process.env.JWT_SECRET || 'SHAHI_SUPER_SECRET_KEY_2026'
+const ALLOWED_IP = process.env.ALLOWED_IP || '127.0.0.1' // Defaulting to Localhost for safety
 
 mongoose
   .connect(MONGO_URI)
   .then(() => console.log('Shahi Studio API: Cloud Connection Established 🚀'))
   .catch((err) => console.error('CRITICAL: Database Connection Failure:', err))
+
+/* ---------------- SECURITY FIREWALL (IP GUARD) ---------------- */
+// This middleware blocks anyone not from your specific computer
+const ipGuard = (req, res, next) => {
+    // Handling Render/Proxy IP detection
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress
+    
+    // Cleaning the IP (handling IPv6 prefixes)
+    const cleanIp = clientIp.replace('::ffff:', '')
+    
+    // Bypass for local development
+    if (cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp === ALLOWED_IP) {
+        return next()
+    }
+
+    console.log(`BLOCKING UNAUTHORIZED ACCESS ATTEMPT FROM: ${cleanIp}`)
+    // We send a 404 instead of 403 to "Ghost" the admin panel (make it look non-existent)
+    res.status(404).send('Not Found') 
+}
 
 /* ---------------- MONITORING ROUTES ---------------- */
 app.get('/api/health', (req, res) => {
@@ -99,8 +119,13 @@ function auth(req, res, next) {
 // NOTE: Registration is DISABLED for security. 
 // Admin accounts must be created directly in the database or via seed script.
 
+// CHECK IP: Allows the frontend to verify if the computer is authorized
+app.get('/api/auth/check-ip', ipGuard, (req, res) => {
+    res.json({ authorized: true })
+})
+
 // LOGIN: Exchanges email/password for a secure 24-hour Token
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', ipGuard, async (req, res) => {
   const { email, password } = req.body
   const user = await User.findOne({ email }) // Finding user in the DB
   if (!user) return res.status(400).json({ message: 'Account Not Found' })
@@ -129,8 +154,8 @@ app.get('/api/projects', async (req, res) => {
   }
 })
 
-// PROTECTED: Add a new project (Admin Only)
-app.post('/api/projects', auth, async (req, res) => {
+// PROTECTED: Add a new project (Admin Only + IP Guarded)
+app.post('/api/projects', [ipGuard, auth], async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
     const project = await Project.create(req.body)
@@ -140,8 +165,8 @@ app.post('/api/projects', auth, async (req, res) => {
   }
 })
 
-// PROTECTED: Remove a project (Admin Only)
-app.delete('/api/projects/:id', auth, async (req, res) => {
+// PROTECTED: Remove a project (Admin Only + IP Guarded)
+app.delete('/api/projects/:id', [ipGuard, auth], async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
     await Project.findByIdAndDelete(req.params.id)
@@ -163,8 +188,8 @@ app.post('/api/inquiries', async (req, res) => {
   }
 })
 
-// PROTECTED: View all inquiries in the Admin Dashboard
-app.get('/api/inquiries', auth, async (req, res) => {
+// PROTECTED: Get all leads (Admin Only + IP Guarded)
+app.get('/api/inquiries', [ipGuard, auth], async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
     const inquiries = await Inquiry.find().sort({ createdAt: -1 })
@@ -174,8 +199,8 @@ app.get('/api/inquiries', auth, async (req, res) => {
   }
 })
 
-// PROTECTED: Clear an inquiry record
-app.delete('/api/inquiries/:id', auth, async (req, res) => {
+// PROTECTED: Clear an inquiry record (Admin Only + IP Guarded)
+app.delete('/api/inquiries/:id', [ipGuard, auth], async (req, res) => {
     try {
         if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
         await Inquiry.findByIdAndDelete(req.params.id)

@@ -15,6 +15,27 @@ export default function Admin() {
 
     // STATE: For adding a brand new project
     const [newProject, setNewProject] = useState({ name: '', location: '', image: '', id: '' })
+    
+    // IP LOCKDOWN STATE:
+    const [isAuthorized, setIsAuthorized] = useState(true) // Defaults to true for local development
+    const [checkingIP, setCheckingIP] = useState(true)
+
+    // LIFECYCLE: Check if this computer is authorized to even see the login screen
+    useEffect(() => {
+        const checkIP = async () => {
+            try {
+                await axios.get(`${API}/auth/check-ip`)
+                setIsAuthorized(true)
+            } catch (err) {
+                if (err.response?.status === 404) {
+                    setIsAuthorized(false) // Ghost mode activated
+                }
+            } finally {
+                setCheckingIP(false)
+            }
+        }
+        checkIP()
+    }, [])
 
     // LIFECYCLE: Automatically fetch data whenever the view (Projects/Inquiries) changes
     useEffect(() => {
@@ -96,6 +117,17 @@ export default function Admin() {
         } catch (err) {
             alert('Process Error: Delete Failed')
         }
+    }
+
+    // GHOST MODE: If IP is unauthorized, show a standard 404
+    if (!checkingIP && !isAuthorized) {
+        return (
+            <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-6 text-center">
+                <h1 className="text-9xl font-bold tracking-tighter text-ink/5 italic">404.</h1>
+                <p className="text-[10px] uppercase tracking-[0.6em] text-ink/40 font-bold -mt-8">Page Not Found</p>
+                <a href="/" className="mt-20 text-[8px] uppercase tracking-[0.4em] font-bold text-gold border-b border-gold pb-1 hover:text-ink hover:border-ink transition-all">Return to Entry</a>
+            </div>
+        )
     }
 
     // CONDITIONAL RENDER: If not logged in, show the minimalist login gate
