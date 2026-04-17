@@ -45,15 +45,16 @@ const ipGuard = (req, res, next) => {
     // Handling Render/Proxy IP detection
     const clientIp = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress
     
-    // Cleaning the IP (handling IPv6 prefixes)
-    const cleanIp = clientIp.replace('::ffff:', '')
+    // Cleaning the IP (handling IPv6 prefixes and spaces)
+    const cleanIp = (clientIp || '').replace('::ffff:', '').trim()
+    const targetIp = (ALLOWED_IP || '').trim()
     
     // Bypass for local development
-    if (cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp === ALLOWED_IP) {
+    if (cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp === targetIp) {
         return next()
     }
 
-    console.log(`BLOCKING UNAUTHORIZED ACCESS ATTEMPT FROM: ${cleanIp}`)
+    console.log(`[FIREWALL] BLOCKING ACCESS FROM: "${cleanIp}" | TARGET WAS: "${targetIp}"`)
     // We send a 404 instead of 403 to "Ghost" the admin panel (make it look non-existent)
     res.status(404).send('Not Found') 
 }
