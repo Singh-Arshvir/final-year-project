@@ -100,10 +100,33 @@ const inquirySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now } // Submission date
 })
 
+// Blueprint for Loyalty Circle Members
+const loyaltySchema = new mongoose.Schema({
+  name: { type: String, required: true },              // Member full name
+  email: { type: String, unique: true, required: true }, // Unique identifier & login key
+  phone: { type: String, default: '' },                // Optional contact
+  points: { type: Number, default: 0 },                // Prestige points (drives tier)
+  tier: { type: String, default: 'ASSOCIATE' },        // ASSOCIATE | FELLOW | PATRON | LAUREATE
+  projectsCompleted: { type: Number, default: 0 },     // Number of finished commissions
+  referrals: { type: Number, default: 0 },             // Clients referred to the studio
+  referredBy: { type: String, default: '' },           // Email of the referring member
+  joinedAt: { type: Date, default: Date.now },         // Membership start date
+  lastActivity: { type: Date, default: Date.now },     // Last interaction timestamp
+})
+
+// Derive tier from points (mirrors frontend TIERS array)
+function deriveTier(pts) {
+  if (pts >= 1000) return 'LAUREATE'
+  if (pts >= 500)  return 'PATRON'
+  if (pts >= 200)  return 'FELLOW'
+  return 'ASSOCIATE'
+}
+
 // Compiling the blueprints into working Models
 const User = mongoose.model('User', userSchema)
 const Project = mongoose.model('Project', projectSchema)
 const Inquiry = mongoose.model('Inquiry', inquirySchema)
+const Loyalty = mongoose.model('Loyalty', loyaltySchema)
 
 /* ---------------- AUTH MIDDLEWARE (SECURITY GUARD) ---------------- */
 // This function checks the 'Passport' (Token) before allowing access to Admin tools
@@ -216,6 +239,88 @@ app.delete('/api/inquiries/:id', [ipGuard, auth], async (req, res) => {
     } catch (err) {
         res.status(400).json({ message: 'Error removing record' })
     }
+})
+
+/* ---------------- LOYALTY CIRCLE ROUTES ---------------- */
+
+// PUBLIC: Register a new Circle member
+app.post('/api/loyalty/register', async (req, res) => {
+  try {
+    const { name, email, phone, referredBy } = req.body
+    if (!name || !email) return res.status(400).json({ message: 'Name and email are required.' })
+
+    const existing = await Loyalty.findOne({ email })
+    if (existing) return res.status(409).json({ message: 'THIS EMAIL IS ALREADY IN THE CIRCLE.' })
+
+    // Award 50 bonus points to the referrer if a valid referredBy email is given
+    if (referredBy) {
+      const referrer = await Loyalty.findOne({ email: referredBy })
+      if (referrer) {
+        referrer.referrals += 1
+        referrer.points += 50
+        referrer.tier = deriveTier(referrer.points)
+        referrer.lastActivity = new Date()
+        await referrer.save()
+      }
+    }
+
+    const member = await Loyalty.create({ name, email, phone: phone || '', referredBy: referredBy || '' })
+    res.status(201).json({ message: 'Membership granted.', id: member._id })
+  } catch (err) {
+    res.status(500).json({ message: 'Registration error. Try again.' })
+  }
+})
+
+// PUBLIC: Retrieve member status by email (for the "My Status" tab)
+app.get('/api/loyalty/status/:email', async (req, res) => {
+  try {
+    const member = await Loyalty.findOne({ email: decodeURIComponent(req.params.email) })
+    if (!member) return res.status(404).json({ message: 'No record found for this email.' })
+    res.json(member)
+  } catch (err) {
+    res.status(500).json({ message: 'Lookup failed.' })
+  }
+})
+
+// PROTECTED: Get all loyalty members — Admin only
+app.get('/api/loyalty', [ipGuard, auth], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
+    const members = await Loyalty.find().sort({ points: -1 }) // Highest-ranked first
+    res.json(members)
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching loyalty roster.' })
+  }
+})
+
+// PROTECTED: Award points to a member and increment project count — Admin only
+app.patch('/api/loyalty/:id/award', [ipGuard, auth], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
+    const { points, projectCompleted } = req.body
+    const member = await Loyalty.findById(req.params.id)
+    if (!member) return res.status(404).json({ message: 'Member not found.' })
+
+    member.points += Number(points) || 0
+    if (projectCompleted) member.projectsCompleted += 1
+    member.tier = deriveTier(member.points)
+    member.lastActivity = new Date()
+    await member.save()
+    res.json(member)
+  } catch (err) {
+    res.status(400).json({ message: 'Award failed.' })
+  }
+})
+
+// PROTECTED: Remove a member from the Circle — Admin only
+app.delete('/api/loyalty/:id', [ipGuard, auth], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Restricted Access' })
+    await Loyalty.findByIdAndDelete(req.params.id)
+    res.json({ message: 'Member Removed from Circle.' })
+  } catch (err) {
+    res.status(400).json({ message: 'Removal failed.' })
+  }
 })
 
 /* ---------------- SERVER LIFTOFF ---------------- */
