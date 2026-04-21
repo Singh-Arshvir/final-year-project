@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion' // Motion library for hi
 import axios from 'axios' // Networking library to communicate with your Shahi Backend API
 import ThreeHero from './components/ThreeHero' // The 3D Engine we built earlier
 import Admin from './admin/Admin' // The Admin Dashboard component
+import LoyaltySection from './components/LoyaltySection' // The Circle loyalty programme section
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api' // Fallback to localhost for development
 
@@ -23,6 +24,7 @@ function Sidebar() {
         <div className="flex flex-col items-center gap-10 text-[9px] font-bold tracking-[0.5em] uppercase text-ink/60">
           <a href="#hero" className="hover:text-gold transition-colors [writing-mode:vertical-lr] rotate-180 font-bold">Home</a>
           <a href="#projects" className="hover:text-gold transition-colors [writing-mode:vertical-lr] rotate-180 font-bold">Works</a>
+          <a href="#loyalty" className="hover:text-gold transition-colors [writing-mode:vertical-lr] rotate-180 font-bold">Circle</a>
           <a href="#contact" className="hover:text-gold transition-colors [writing-mode:vertical-lr] rotate-180 font-bold">Contact</a>
         </div>
       </div>
@@ -32,6 +34,7 @@ function Sidebar() {
         <div className="text-[10px] font-bold tracking-[0.4em] uppercase text-ink">Shahi Architects</div>
         <div className="flex gap-6 text-[9px] font-bold tracking-widest uppercase text-ink/60">
             <a href="#projects" className="hover:text-gold transition-colors">Works</a>
+            <a href="#loyalty" className="hover:text-gold transition-colors">Circle</a>
             <a href="#contact" className="hover:text-gold transition-colors">Contact</a>
         </div>
       </div>
@@ -225,6 +228,9 @@ function MainSite() {
                 </div>
             </Section>
         </section>
+
+        {/* LOYALTY CIRCLE SECTION */}
+        <LoyaltySection />
 
         {/* CONTACT/INQUIRY SECTION */}
         <section id="contact" className="lg:ml-[100px] px-6 md:px-20 py-[20vh] bg-paper-dim/60 border-t border-ink/5 relative">

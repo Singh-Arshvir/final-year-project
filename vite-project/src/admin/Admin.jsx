@@ -9,12 +9,16 @@ export default function Admin() {
     const [userRole, setUserRole] = useState(localStorage.getItem('shahi_role')) // User role from login
     const [email, setEmail] = useState('') // Login email intake
     const [password, setPassword] = useState('') // Login password intake
-    const [view, setView] = useState('projects') // View toggle: 'projects' or 'inquiries'
+    const [view, setView] = useState('projects') // View toggle: 'projects', 'inquiries', or 'loyalty'
     const [data, setData] = useState([]) // Container for projects or enquiries fetched from DB
     const [loading, setLoading] = useState(false) // Spinner state for when data is being fetched
 
     // STATE: For adding a brand new project
     const [newProject, setNewProject] = useState({ name: '', location: '', image: '', id: '' })
+
+    // STATE: For awarding loyalty points
+    const [awardState, setAwardState] = useState({}) // { [memberId]: { points: '', projectCompleted: false } }
+    const [awardStatus, setAwardStatus] = useState({}) // { [memberId]: 'success' | 'error' }
     
     // IP LOCKDOWN STATE:
     const [isAuthorized, setIsAuthorized] = useState(true) // Defaults to true for local development
@@ -48,16 +52,35 @@ export default function Admin() {
     const fetchData = async () => {
         setLoading(true)
         try {
-            const endpoint = view === 'projects' ? '/projects' : '/inquiries'
+            const endpoint = view === 'projects' ? '/projects' : view === 'inquiries' ? '/inquiries' : '/loyalty'
             const res = await axios.get(`${API}${endpoint}`, {
                 headers: { Authorization: `Bearer ${token}` } // Passing the JWT Token for security
             })
             setData(res.data) // Updating the dashboard with real items
         } catch (err) {
             console.error(err)
-            if (err.response?.status === 401 || err.response?.status === 403) handleLogout() // Force logout if access is denied
+            if (err.response?.status === 401 || err.response?.status === 403) handleLogout()
         }
         setLoading(false)
+    }
+
+    // AWARD POINTS: Send points award to a loyalty member
+    const handleAward = async (memberId) => {
+        const state = awardState[memberId] || {}
+        const pts = parseInt(state.points) || 0
+        if (pts <= 0) return
+        try {
+            await axios.patch(`${API}/loyalty/${memberId}/award`, {
+                points: pts,
+                projectCompleted: state.projectCompleted || false
+            }, { headers: { Authorization: `Bearer ${token}` } })
+            setAwardStatus(prev => ({ ...prev, [memberId]: 'success' }))
+            setAwardState(prev => ({ ...prev, [memberId]: { points: '', projectCompleted: false } }))
+            fetchData()
+            setTimeout(() => setAwardStatus(prev => ({ ...prev, [memberId]: null })), 2500)
+        } catch (err) {
+            setAwardStatus(prev => ({ ...prev, [memberId]: 'error' }))
+        }
     }
 
     // LOGIN ACTION: Exchanges credentials for a 24-hour Authorization Token and User Role
@@ -105,15 +128,15 @@ export default function Admin() {
         }
     }
 
-    // DELETE ACTION: Removes projects or inquiries from the database permenantly
+    // DELETE ACTION: Removes projects, inquiries, or loyalty members from the database
     const handleDelete = async (id) => {
         if (!window.confirm('IRREVERSIBLE: Confirmed deletion from Database?')) return
         try {
-            const endpoint = view === 'projects' ? '/projects' : '/inquiries'
+            const endpoint = view === 'projects' ? '/projects' : view === 'inquiries' ? '/inquiries' : '/loyalty'
             await axios.delete(`${API}${endpoint}/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
-            fetchData() 
+            fetchData()
         } catch (err) {
             alert('Process Error: Delete Failed')
         }
@@ -182,17 +205,23 @@ export default function Admin() {
                 <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
                     <h1 className="text-[10px] font-bold tracking-[0.6em] uppercase text-ink underline decoration-gold underline-offset-4 select-none">Admin / Shahi Studio</h1>
                     <div className="flex gap-8">
-                        <button 
+                        <button
                             onClick={() => setView('projects')}
                             className={`text-[9px] font-bold tracking-[0.2em] uppercase transition-all ${view === 'projects' ? 'text-ink border-b-2 border-gold pb-1' : 'text-ink/30'}`}
                         >
                             Global Works
                         </button>
-                        <button 
+                        <button
                             onClick={() => setView('inquiries')}
                             className={`text-[9px] font-bold tracking-[0.2em] uppercase transition-all ${view === 'inquiries' ? 'text-ink border-b-2 border-gold pb-1' : 'text-ink/30'}`}
                         >
                             Client Inquiries
+                        </button>
+                        <button
+                            onClick={() => setView('loyalty')}
+                            className={`text-[9px] font-bold tracking-[0.2em] uppercase transition-all ${view === 'loyalty' ? 'text-ink border-b-2 border-gold pb-1' : 'text-ink/30'}`}
+                        >
+                            The Circle
                         </button>
                     </div>
                 </div>
@@ -200,7 +229,91 @@ export default function Admin() {
             </div>
 
             <main className="p-6 sm:p-12 flex-1">
-                {view === 'projects' ? (
+                {view === 'loyalty' ? (
+                    /* ── LOYALTY ROSTER ── */
+                    <div className="max-w-6xl mx-auto">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase text-ink">Circle Roster</h3>
+                            <span className="text-[9px] font-mono text-ink/40 uppercase font-bold">({data.length} Members Enrolled)</span>
+                        </div>
+                        {loading ? (
+                            <div className="text-[9px] uppercase font-mono animate-pulse text-ink/30">Synchronizing Circle Data...</div>
+                        ) : data.length === 0 ? (
+                            <div className="text-[9px] uppercase font-mono text-ink/20 p-20 text-center border border-ink/5">No members yet.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {data.map(m => {
+                                    const tier = m.tier || 'ASSOCIATE'
+                                    const tierColor = tier === 'LAUREATE' || tier === 'PATRON' ? 'text-gold' : 'text-ink/50'
+                                    const tierBadge = tier === 'LAUREATE' ? 'bg-gold text-white' : tier === 'PATRON' ? 'bg-gold/10 text-gold' : tier === 'FELLOW' ? 'bg-ink/10 text-ink' : 'bg-paper-dim text-ink/40'
+                                    const state = awardState[m._id] || {}
+                                    return (
+                                        <div key={m._id} className="border border-ink/5 bg-white shadow-sm hover:border-gold/40 transition-all duration-500 group">
+                                            {/* Member summary row */}
+                                            <div className="flex flex-wrap items-center gap-4 p-6">
+                                                {/* Tier Badge */}
+                                                <span className={`text-[7px] font-bold tracking-[0.5em] uppercase px-3 py-1 flex-shrink-0 ${tierBadge}`}>{tier}</span>
+                                                {/* Name / Email */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-[10px] font-bold uppercase tracking-widest text-ink truncate">{m.name}</div>
+                                                    <div className="text-[8px] font-mono text-ink/40">{m.email}</div>
+                                                </div>
+                                                {/* Stats */}
+                                                <div className="flex gap-6 text-center flex-shrink-0">
+                                                    <div>
+                                                        <div className="text-[7px] uppercase tracking-widest text-ink/30 font-bold">Points</div>
+                                                        <div className={`text-sm font-bold tracking-tighter ${tierColor}`}>{m.points}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-[7px] uppercase tracking-widest text-ink/30 font-bold">Projects</div>
+                                                        <div className="text-sm font-bold tracking-tighter text-ink">{m.projectsCompleted}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-[7px] uppercase tracking-widest text-ink/30 font-bold">Referrals</div>
+                                                        <div className="text-sm font-bold tracking-tighter text-ink">{m.referrals}</div>
+                                                    </div>
+                                                </div>
+                                                {/* Award inline form */}
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        placeholder="PTS"
+                                                        className="w-16 bg-transparent border-b border-ink/10 py-1 text-[9px] font-bold outline-none focus:border-gold transition-colors text-center"
+                                                        value={state.points || ''}
+                                                        onChange={e => setAwardState(prev => ({ ...prev, [m._id]: { ...state, points: e.target.value } }))}
+                                                    />
+                                                    <label className="flex items-center gap-1 cursor-pointer text-[8px] font-bold uppercase tracking-wider text-ink/40">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="accent-gold"
+                                                            checked={state.projectCompleted || false}
+                                                            onChange={e => setAwardState(prev => ({ ...prev, [m._id]: { ...state, projectCompleted: e.target.checked } }))}
+                                                        />
+                                                        +Proj
+                                                    </label>
+                                                    <button
+                                                        onClick={() => handleAward(m._id)}
+                                                        className="text-[8px] font-bold uppercase tracking-widest px-3 py-1 bg-ink text-white hover:bg-gold transition-all"
+                                                    >
+                                                        {awardStatus[m._id] === 'success' ? '✓' : awardStatus[m._id] === 'error' ? '✗' : 'Award'}
+                                                    </button>
+                                                </div>
+                                                {/* Delete */}
+                                                <button
+                                                    onClick={() => handleDelete(m._id)}
+                                                    className="sm:opacity-0 group-hover:opacity-100 text-[9px] font-bold text-red-500/40 hover:text-red-500 uppercase tracking-widest transition-all"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                ) : view === 'projects' ? (
                     <div className="max-w-6xl mx-auto">
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
                             {/* PROJECT FORM: Interactive drafting form */}
@@ -236,6 +349,7 @@ export default function Admin() {
                         </div>
                     </div>
                 ) : (
+                    /* ── INQUIRY TABLE ── */
                     <div className="max-w-6xl mx-auto bg-white border border-ink/5 shadow-sm overflow-hidden">
                         {/* INQUIRY VIEWER: Precision table for lead monitoring */}
                         <div className="p-8 border-b border-ink/5 flex justify-between items-center bg-paper-dim/30">
