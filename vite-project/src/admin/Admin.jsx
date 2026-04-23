@@ -15,31 +15,15 @@ export default function Admin() {
 
     // STATE: For adding a brand new project
     const [newProject, setNewProject] = useState({ name: '', location: '', image: '', id: '' })
+    const [selectedFile, setSelectedFile] = useState(null) // STATE: File picker selection
 
     // STATE: For awarding loyalty points
     const [awardState, setAwardState] = useState({}) // { [memberId]: { points: '', projectCompleted: false } }
     const [awardStatus, setAwardStatus] = useState({}) // { [memberId]: 'success' | 'error' }
     
-    // IP LOCKDOWN STATE:
-    const [isAuthorized, setIsAuthorized] = useState(true) // Defaults to true for local development
-    const [checkingIP, setCheckingIP] = useState(true)
 
-    // LIFECYCLE: Check if this computer is authorized to even see the login screen
-    useEffect(() => {
-        const checkIP = async () => {
-            try {
-                await axios.get(`${API}/auth/check-ip`)
-                setIsAuthorized(true)
-            } catch (err) {
-                if (err.response?.status === 404) {
-                    setIsAuthorized(false) // Ghost mode activated
-                }
-            } finally {
-                setCheckingIP(false)
-            }
-        }
-        checkIP()
-    }, [])
+
+
 
     // LIFECYCLE: Automatically fetch data whenever the view (Projects/Inquiries) changes
     useEffect(() => {
@@ -118,10 +102,23 @@ export default function Admin() {
     const handleAddProject = async (e) => {
         e.preventDefault()
         try {
-            await axios.post(`${API}/projects`, newProject, {
+            let imageUrl = newProject.image // Fallback to provided URL if any
+            
+            // If the user actually provided a fresh computer file, upload it to /api/upload first
+            if (selectedFile) {
+                const formData = new FormData()
+                formData.append('image', selectedFile)
+                const uploadRes = await axios.post(`${API}/upload`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+                })
+                imageUrl = uploadRes.data.imageUrl // The new server address for the file
+            }
+
+            await axios.post(`${API}/projects`, { ...newProject, image: imageUrl }, {
                 headers: { Authorization: `Bearer ${token}` }
             })
             setNewProject({ name: '', location: '', image: '', id: '' }) // Resetting the form
+            setSelectedFile(null)
             fetchData() 
         } catch (err) {
             alert('Drafting Error: Failed to publish project.')
@@ -142,16 +139,37 @@ export default function Admin() {
         }
     }
 
-    // GHOST MODE: If IP is unauthorized, show a standard 404
-    if (!checkingIP && !isAuthorized) {
-        return (
-            <div className="min-h-screen bg-paper flex flex-col items-center justify-center p-6 text-center">
-                <h1 className="text-9xl font-bold tracking-tighter text-ink/5 italic">404.</h1>
-                <p className="text-[10px] uppercase tracking-[0.6em] text-ink/40 font-bold -mt-8">Page Not Found</p>
-                <a href="/" className="mt-20 text-[8px] uppercase tracking-[0.4em] font-bold text-gold border-b border-gold pb-1 hover:text-ink hover:border-ink transition-all">Return to Entry</a>
-            </div>
-        )
+    // CSV REPORT LOGIC: Convert active data payload into a browser downloadable file
+    const downloadCSV = (dataToExport, filename) => {
+        if (!dataToExport || dataToExport.length === 0) return alert('Archive is empty, nothing to export.')
+
+        // Stripping out mongo ID handles and passwords for privacy
+        const headers = Object.keys(dataToExport[0]).filter(key => key !== '__v' && key !== 'password')
+        const csvRows = []
+        
+        // Print column names
+        csvRows.push(headers.join(','))
+        
+        // Map raw data into comma cells
+        for (const row of dataToExport) {
+            const values = headers.map(header => {
+                const escaped = ('' + (row[header] || '')).replace(/"/g, '""')
+                return `"${escaped}"`
+            })
+            csvRows.push(values.join(','))
+        }
+
+        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a) // Clean up UI tree
     }
+
+
 
     // CONDITIONAL RENDER: If not logged in, show the minimalist login gate
     if (!token) {
@@ -232,9 +250,12 @@ export default function Admin() {
                 {view === 'loyalty' ? (
                     /* ── LOYALTY ROSTER ── */
                     <div className="max-w-6xl mx-auto">
-                        <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase text-ink">Circle Roster</h3>
-                            <span className="text-[9px] font-mono text-ink/40 uppercase font-bold">({data.length} Members Enrolled)</span>
+                        <div className="flex justify-between items-center mb-8 gap-4">
+                            <div>
+                                <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase text-ink">Circle Roster</h3>
+                                <span className="text-[9px] font-mono text-ink/40 uppercase font-bold">({data.length} Members Enrolled)</span>
+                            </div>
+                            <button onClick={() => downloadCSV(data, 'loyalty_members_roster.csv')} className="text-[8px] font-bold tracking-widest uppercase border border-ink/10 px-4 py-2 hover:bg-ink hover:text-white transition-colors bg-white shadow-sm whitespace-nowrap">Download Report (CSV)</button>
                         </div>
                         {loading ? (
                             <div className="text-[9px] uppercase font-mono animate-pulse text-ink/30">Synchronizing Circle Data...</div>
@@ -323,7 +344,12 @@ export default function Admin() {
                                     <input type="text" placeholder="ID (e.g. 05)" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.id} onChange={e => setNewProject({...newProject, id: e.target.value})} />
                                     <input type="text" placeholder="NAME" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} />
                                     <input type="text" placeholder="LOCATION" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.location} onChange={e => setNewProject({...newProject, location: e.target.value})} />
-                                    <input type="text" placeholder="IMAGE URL" className="bg-transparent border-b border-ink/5 py-3 text-[10px] font-bold outline-none focus:border-gold transition-colors" value={newProject.image} onChange={e => setNewProject({...newProject, image: e.target.value})} />
+                                    
+                                    <div className="flex flex-col gap-2 mt-2">
+                                        <label className="text-[8px] font-bold tracking-[0.3em] uppercase text-ink/40">Upload Project Image</label>
+                                        <input type="file" accept="image/*" onChange={e => setSelectedFile(e.target.files[0])} className="text-[10px] file:mr-4 file:py-2 file:px-4 file:border-0 file:text-[9px] file:font-bold file:uppercase file:tracking-widest file:bg-ink/10 file:text-ink hover:file:bg-ink hover:file:text-white transition-all cursor-pointer font-mono text-ink/50" />
+                                    </div>
+
                                     <button className="bg-ink text-white py-4 text-[9px] font-bold uppercase tracking-[0.5em] mt-4 hover:bg-gold transition-all duration-500">Publish to Live Gallery</button>
                                 </form>
                             </div>
@@ -352,9 +378,12 @@ export default function Admin() {
                     /* ── INQUIRY TABLE ── */
                     <div className="max-w-6xl mx-auto bg-white border border-ink/5 shadow-sm overflow-hidden">
                         {/* INQUIRY VIEWER: Precision table for lead monitoring */}
-                        <div className="p-8 border-b border-ink/5 flex justify-between items-center bg-paper-dim/30">
-                            <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase text-ink">Inbound Client Leads</h3>
-                            <span className="text-[9px] font-mono text-ink/40 uppercase font-bold">({data.length} Submissions Logged)</span>
+                        <div className="p-8 border-b border-ink/5 flex justify-between items-center bg-paper-dim/30 gap-4">
+                            <div>
+                                <h3 className="text-[10px] font-bold tracking-[0.3em] uppercase text-ink">Inbound Client Leads</h3>
+                                <span className="text-[9px] font-mono text-ink/40 uppercase font-bold">({data.length} Submissions Logged)</span>
+                            </div>
+                            <button onClick={() => downloadCSV(data, 'client_inquiries_report.csv')} className="text-[8px] font-bold tracking-widest uppercase border border-ink/10 px-4 py-2 hover:bg-ink hover:text-white transition-colors bg-white shadow-sm whitespace-nowrap">Download Report (CSV)</button>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left min-w-[600px]">
