@@ -120,25 +120,47 @@ const Project = mongoose.model('Project', projectSchema)
 const Inquiry = mongoose.model('Inquiry', inquirySchema)
 const Loyalty = mongoose.model('Loyalty', loyaltySchema)
 
-/* ---------------- IP WHITELIST MIDDLEWARE ---------------- */
+
+/* ---------------- IP WHITELIST MIDDLEWARE (THE "BOUNCER") ---------------- */
+/**
+ * SECURITY GUARD: This function acts as a firewall. 
+ * Even if a user has the correct password, they are BLOCKED if their IP is not on the list.
+ */
 function requireAdminIP(req, res, next) {
+  // 1. Fetch the list of "VIP" IPs from the .env file.
+  // If .env is empty, it only allows the local computer (127.0.0.1 or ::1).
   const allowedString = process.env.ALLOWED_ADMIN_IPS || '127.0.0.1,::1'
+  
+  // 2. Turn that string into a clean list (array) of addresses.
   const allowedIps = allowedString.split(',').map((ip) => ip.trim())
 
+  // 3. Detect the "Visitor's" IP address.
+  // We check 'x-forwarded-for' first because if the site is on Render/Cloudflare, 
+  // the real user IP is hidden inside that header.
   let rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || ''
+  
+  // 4. Handle proxy chains (if there are multiple IPs, we take the first one).
   if (rawIp.includes(',')) {
     rawIp = rawIp.split(',')[0].trim()
   }
 
+  // 5. Normalise the IP. 
+  // Sometimes IPv4 addresses look like "::ffff:192.168.1.1". We strip the prefix.
   const ipv4 = rawIp.includes('::ffff:') ? rawIp.split('::ffff:')[1] : rawIp
 
-  if (allowedIps.includes('*')) return next() // Wildcard bypass if ever needed
+  // 6. EMERGENCY BYPASS: If the whitelist contains '*', everyone gets in.
+  if (allowedIps.includes('*')) return next() 
 
+  // 7. THE FINAL CHECK: Is the visitor's IP (either raw or clean) in our allowed list?
   if (!allowedIps.includes(rawIp) && !allowedIps.includes(ipv4)) {
+    // If NOT on the list, log a warning and block them with "403 Forbidden".
     console.warn(`SECURITY: Blocked admin access from strictly untrusted IP: ${rawIp}`)
-    return res.status(403).json({ message: 'Access Denied: Your IP address is not whitelisted for the admin panel.' })
+    return res.status(403).json({ 
+      message: 'Access Denied: Your IP address is not whitelisted for the admin panel.' 
+    })
   }
 
+  // 8. SUCCESS: The visitor is trusted. Let them through to the next function.
   next()
 }
 
