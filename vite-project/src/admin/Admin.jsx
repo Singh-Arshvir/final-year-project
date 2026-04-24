@@ -20,6 +20,7 @@ export default function Admin() {
     // STATE: For awarding loyalty points
     const [awardState, setAwardState] = useState({}) // { [memberId]: { points: '', projectCompleted: false } }
     const [awardStatus, setAwardStatus] = useState({}) // { [memberId]: 'success' | 'error' }
+    const [uploadingFile, setUploadingFile] = useState({}) // { [memberId]: boolean }
     
 
 
@@ -64,6 +65,36 @@ export default function Admin() {
             setTimeout(() => setAwardStatus(prev => ({ ...prev, [memberId]: null })), 2500)
         } catch (err) {
             setAwardStatus(prev => ({ ...prev, [memberId]: 'error' }))
+        }
+    }
+
+    // FILE UPLOAD: Attach a document to a loyalty member
+    const handleFileUpload = async (memberId, file) => {
+        if (!file) return
+        setUploadingFile(prev => ({ ...prev, [memberId]: true }))
+        try {
+            const formData = new FormData()
+            formData.append('file', file)
+            await axios.post(`${API}/loyalty/${memberId}/files`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+            })
+            fetchData()
+        } catch (err) {
+            alert('Transfer Error: Failed to attach file to member.')
+        }
+        setUploadingFile(prev => ({ ...prev, [memberId]: false }))
+    }
+
+    // FILE DELETE: Remove an attachment from a member
+    const handleFileDelete = async (memberId, fileId) => {
+        if (!window.confirm('IRREVERSIBLE: Remove this document from client access?')) return
+        try {
+            await axios.delete(`${API}/loyalty/${memberId}/files/${fileId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            fetchData()
+        } catch (err) {
+            alert('Process Error: File removal failed.')
         }
     }
 
@@ -327,6 +358,49 @@ export default function Admin() {
                                                 >
                                                     Remove
                                                 </button>
+                                            </div>
+
+                                            {/* File Management Expansion */}
+                                            <div className="px-6 pb-6 pt-2 border-t border-ink/[0.02] bg-paper-dim/10">
+                                                <div className="flex flex-col gap-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <h4 className="text-[7px] font-bold uppercase tracking-[0.3em] text-ink/40">Shared Documents & Plans</h4>
+                                                        <label className="cursor-pointer">
+                                                            <input 
+                                                                type="file" 
+                                                                className="hidden" 
+                                                                onChange={(e) => handleFileUpload(m._id, e.target.files[0])}
+                                                                disabled={uploadingFile[m._id]}
+                                                            />
+                                                            <span className={`text-[7px] font-bold uppercase tracking-widest px-3 py-1 border border-ink/10 hover:bg-ink hover:text-white transition-all ${uploadingFile[m._id] ? 'animate-pulse' : ''}`}>
+                                                                {uploadingFile[m._id] ? 'Uploading...' : '+ Attach File'}
+                                                            </span>
+                                                        </label>
+                                                    </div>
+
+                                                    {m.files && m.files.length > 0 ? (
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                            {m.files.map(f => (
+                                                                <div key={f._id} className="flex items-center justify-between bg-white border border-ink/5 p-2 px-3 group/file">
+                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                        <div className="w-1 h-1 rounded-full bg-gold"></div>
+                                                                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-[8px] font-bold uppercase tracking-wider text-ink/60 truncate hover:text-gold transition-colors">
+                                                                            {f.name}
+                                                                        </a>
+                                                                    </div>
+                                                                    <button 
+                                                                        onClick={() => handleFileDelete(m._id, f._id)}
+                                                                        className="text-[8px] font-bold text-red-500/20 hover:text-red-500 opacity-0 group-hover/file:opacity-100 transition-all"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-[7px] uppercase font-bold tracking-widest text-ink/20 py-2">No documents currently shared with this client.</div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )

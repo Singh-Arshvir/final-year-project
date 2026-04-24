@@ -350,6 +350,56 @@ export default function LoyaltySection() {
                       </div>
                     </div>
                   </div>
+
+                    {/* PROJECT DOCUMENTS / TRACKING */}
+                    {member.files && member.files.length > 0 && (
+                      <div className="mt-2 pt-6 border-t border-ink/5 bg-paper-dim/30 p-8 sm:p-10">
+                        <div className="flex items-center gap-3 mb-6">
+                           <div className="w-2 h-[2px] bg-gold" />
+                           <h4 className="text-[9px] font-bold uppercase tracking-[0.4em] text-ink">
+                             Shared Documents & Project Files
+                           </h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {member.files.map((file, idx) => (
+                            <motion.a
+                              key={file._id || idx}
+                              href={file.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.1 }}
+                              className="group flex items-center justify-between p-5 bg-white border border-ink/5 hover:border-gold/30 hover:shadow-xl transition-all duration-500"
+                            >
+                              <div className="flex items-center gap-4 min-w-0">
+                                <div className="p-2 bg-paper border border-ink/5 group-hover:bg-gold/5 group-hover:border-gold/20 transition-all">
+                                   <svg className="w-4 h-4 text-ink/20 group-hover:text-gold transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                   </svg>
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-ink/70 group-hover:text-ink truncate">
+                                    {file.name}
+                                  </div>
+                                  <div className="text-[7px] font-mono text-ink/30 mt-1 uppercase">
+                                     Published: {new Date(file.uploadedAt).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                 <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-ink/20 group-hover:text-gold transition-colors whitespace-nowrap">
+                                   Access Archive
+                                 </span>
+                                 <svg className="w-3 h-3 text-ink/10 group-hover:text-gold group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                 </svg>
+                              </div>
+                            </motion.a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                 </motion.div>
               )}
             </motion.div>
