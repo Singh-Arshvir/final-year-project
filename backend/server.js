@@ -102,6 +102,13 @@ const loyaltySchema = new mongoose.Schema({
   projectsCompleted: { type: Number, default: 0 }, // Number of finished commissions
   referrals: { type: Number, default: 0 }, // Clients referred to the studio
   referredBy: { type: String, default: '' }, // Email of the referring member
+  files: [
+    {
+      name: String,
+      url: String,
+      uploadedAt: { type: Date, default: Date.now },
+    },
+  ], // Documents/Plans shared with the client
   joinedAt: { type: Date, default: Date.now }, // Membership start date
   lastActivity: { type: Date, default: Date.now }, // Last interaction timestamp
 })
@@ -390,6 +397,51 @@ app.delete('/api/loyalty/:id', auth, async (req, res) => {
     res.json({ message: 'Member Removed from Circle.' })
   } catch (err) {
     res.status(400).json({ message: 'Removal failed.' })
+  }
+})
+
+/* ---------------- LOYALTY FILE MANAGEMENT ---------------- */
+
+// PROTECTED: Add a file to a member — Admin only
+app.post('/api/loyalty/:id/files', [auth, upload.single('file')], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin')
+      return res.status(403).json({ message: 'Restricted Access' })
+    
+    if (!req.file)
+      return res.status(400).json({ message: 'No file provided.' })
+
+    const member = await Loyalty.findById(req.params.id)
+    if (!member) return res.status(404).json({ message: 'Member not found.' })
+
+    member.files.push({
+      name: req.body.name || req.file.originalname,
+      url: req.file.path,
+    })
+    member.lastActivity = new Date()
+    await member.save()
+    
+    res.status(201).json(member)
+  } catch (err) {
+    res.status(500).json({ message: 'File upload failed.' })
+  }
+})
+
+// PROTECTED: Remove a file from a member — Admin only
+app.delete('/api/loyalty/:id/files/:fileId', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin')
+      return res.status(403).json({ message: 'Restricted Access' })
+
+    const member = await Loyalty.findById(req.params.id)
+    if (!member) return res.status(404).json({ message: 'Member not found.' })
+
+    member.files = member.files.filter(f => f._id.toString() !== req.params.fileId)
+    await member.save()
+    
+    res.json(member)
+  } catch (err) {
+    res.status(500).json({ message: 'File removal failed.' })
   }
 })
 
