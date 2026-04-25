@@ -238,6 +238,7 @@ function ContactForm() {
 // MAIN SITE COMPONENT: Assembles all website elements
 function MainSite() {
   const [projects, setProjects] = useState([])
+  const isLoggedIn = !!localStorage.getItem('shahi_token')
 
   // Fetching the projects from the database as soon as the site loads
   useEffect(() => {
@@ -323,8 +324,30 @@ function MainSite() {
           </Section>
         </section>
 
-        {/* LOYALTY CIRCLE SECTION */}
-        <LoyaltySection />
+        {/* LOYALTY CIRCLE SECTION: Restricted Access */}
+        {isLoggedIn ? (
+          <LoyaltySection />
+        ) : (
+          <section
+            id="loyalty"
+            className="lg:ml-[100px] border-b border-ink/5 py-[15vh] bg-paper-dim/20 flex flex-col items-center justify-center text-center px-6"
+          >
+            <span className="text-[9px] font-mono text-ink/20 mb-6 block tracking-[0.5em] font-bold uppercase">Restricted Area</span>
+            <h3 className="text-2xl font-bold uppercase tracking-tighter text-ink mb-4 italic">
+              Join The Circle.
+            </h3>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ink/40 mb-10 max-w-xs leading-relaxed">
+              Access to exclusive architectural plans, project tracking, and
+              prestige status is reserved for authenticated members.
+            </p>
+            <a
+              href="/login"
+              className="px-10 py-5 bg-ink text-white text-[9px] font-bold uppercase tracking-[0.5em] hover:bg-gold transition-all shadow-xl active:scale-95"
+            >
+              Authenticate Access
+            </a>
+          </section>
+        )}
 
         {/* CONTACT/INQUIRY SECTION */}
         <section
