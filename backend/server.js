@@ -1,21 +1,3 @@
-/* 
-  -------------------------------------------------------------------------
-  🏛️ SHAHI ARCHITECTS: FULL-STACK OWNER REFERENCE
-  -------------------------------------------------------------------------
-  
-  ADMIN DASHBOARD URL: http://localhost:5173/admin
-  
-  LOGIN CREDENTIALS:
-  - EMAIL:    arshvirshahi45@gmail.com
-  - PASSWORD: shahi2026
-  
-  SECURITY NOTICE: 
-  - Registration is DISABLED. Only this account has access.
-  - The JWT Token expires every 24 hours for your protection.
-  
-  -------------------------------------------------------------------------
-*/
-
 import { v2 as cloudinary } from 'cloudinary'
 import { CloudinaryStorage } from 'multer-storage-cloudinary'
 import multer from 'multer'
@@ -128,66 +110,32 @@ const Inquiry = mongoose.model('Inquiry', inquirySchema)
 const Loyalty = mongoose.model('Loyalty', loyaltySchema)
 
 
-/* ---------------- IP WHITELIST MIDDLEWARE (THE "BOUNCER") ---------------- */
-/**
- * SECURITY GUARD: This function acts as a firewall. 
- * Even if a user has the correct password, they are BLOCKED if their IP is not on the list.
- */
-function requireAdminIP(req, res, next) {
-  // 1. Fetch the list of "VIP" IPs from the .env file.
-  // If .env is empty, it only allows the local computer (127.0.0.1 or ::1).
-  const allowedString = process.env.ALLOWED_ADMIN_IPS || '127.0.0.1,::1'
-  
-  // 2. Turn that string into a clean list (array) of addresses.
-  const allowedIps = allowedString.split(',').map((ip) => ip.trim())
-
-  // 3. Detect the "Visitor's" IP address.
-  // We check 'x-forwarded-for' first because if the site is on Render/Cloudflare, 
-  // the real user IP is hidden inside that header.
-  let rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || ''
-  
-  // 4. Handle proxy chains (if there are multiple IPs, we take the first one).
-  if (rawIp.includes(',')) {
-    rawIp = rawIp.split(',')[0].trim()
-  }
-
-  // 5. Normalise the IP. 
-  // Sometimes IPv4 addresses look like "::ffff:192.168.1.1". We strip the prefix.
-  const ipv4 = rawIp.includes('::ffff:') ? rawIp.split('::ffff:')[1] : rawIp
-
-  // 6. EMERGENCY BYPASS: If the whitelist contains '*', everyone gets in.
-  if (allowedIps.includes('*')) return next() 
-
-  // 7. THE FINAL CHECK: Is the visitor's IP (either raw or clean) in our allowed list?
-  if (!allowedIps.includes(rawIp) && !allowedIps.includes(ipv4)) {
-    // If NOT on the list, log a warning and block them with "403 Forbidden".
-    console.warn(`SECURITY: Blocked admin access from strictly untrusted IP: ${rawIp}`)
-    return res.status(403).json({ 
-      message: 'Access Denied: Your IP address is not whitelisted for the admin panel.' 
-    })
-  }
-
-  // 8. SUCCESS: The visitor is trusted. Let them through to the next function.
-  next()
-}
 
 /* ---------------- AUTH MIDDLEWARE (SECURITY GUARD) ---------------- */
 // This function checks the 'Passport' (Token) before allowing access to Admin tools
 function auth(req, res, next) {
-  requireAdminIP(req, res, () => {
-    const authHeader = req.headers.authorization
-    const token = authHeader && authHeader.split(' ')[1] // Extracting the token from 'Bearer <token>'
+  const authHeader = req.headers.authorization
+  const token = authHeader && authHeader.split(' ')[1] // Extracting the token from 'Bearer <token>'
 
-    if (!token)
-      return res.status(401).json({ message: 'Access Denied: No Token Provided' })
+  if (!token)
+    return res.status(401).json({ message: 'Access Denied: No Token Provided' })
 
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET)
-      req.user = decoded // Storing the logged-in user data in the request
-      next() // Letting the request proceed to the final step
-    } catch (err) {
-      res.status(401).json({ message: 'Invalid or Expired Token' }) // Rejection if token is old or fake
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET)
+    req.user = decoded // Storing the logged-in user data in the request
+    next() // Letting the request proceed to the final step
+  } catch (err) {
+    res.status(401).json({ message: 'Invalid or Expired Token' }) // Rejection if token is old or fake
+  }
+}
+
+// Dedicated middleware for ADMIN ONLY actions
+function adminAuth(req, res, next) {
+  auth(req, res, () => {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Restricted Access: Administrative Privileges Required' })
     }
+    next()
   })
 }
 
@@ -197,7 +145,7 @@ function auth(req, res, next) {
 // Admin accounts must be created directly in the database or via seed script.
 
 // LOGIN: Exchanges email/password for a secure 24-hour Token
-app.post('/api/auth/login', requireAdminIP, async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body
   const user = await User.findOne({ email }) // Finding user in the DB
   if (!user) return res.status(400).json({ message: 'Account Not Found' })
@@ -227,13 +175,11 @@ app.get('/api/projects', async (req, res) => {
 })
 
 // PROTECTED: Upload an Image (Admin Only)
-app.post('/api/upload', [auth, upload.single('image')], (req, res) => {
+app.post('/api/upload', [adminAuth, upload.single('image')], (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     if (!req.file)
       return res.status(400).json({ message: 'No file provided.' })
-    
+
     // Cloudinary returns the secure URL via req.file.path
     res.status(201).json({ imageUrl: req.file.path })
   } catch (err) {
@@ -242,10 +188,8 @@ app.post('/api/upload', [auth, upload.single('image')], (req, res) => {
 })
 
 // PROTECTED: Add a new project (Admin Only)
-app.post('/api/projects', auth, async (req, res) => {
+app.post('/api/projects', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     const project = await Project.create(req.body)
     res.status(201).json(project)
   } catch (err) {
@@ -254,10 +198,8 @@ app.post('/api/projects', auth, async (req, res) => {
 })
 
 // PROTECTED: Remove a project (Admin Only)
-app.delete('/api/projects/:id', auth, async (req, res) => {
+app.delete('/api/projects/:id', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     await Project.findByIdAndDelete(req.params.id)
     res.json({ message: 'Project Successfully Deleted' })
   } catch (err) {
@@ -278,10 +220,8 @@ app.post('/api/inquiries', async (req, res) => {
 })
 
 // PROTECTED: Get all leads (Admin Only)
-app.get('/api/inquiries', auth, async (req, res) => {
+app.get('/api/inquiries', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     const inquiries = await Inquiry.find().sort({ createdAt: -1 })
     res.json(inquiries)
   } catch (err) {
@@ -290,10 +230,8 @@ app.get('/api/inquiries', auth, async (req, res) => {
 })
 
 // PROTECTED: Clear an inquiry record (Admin Only)
-app.delete('/api/inquiries/:id', auth, async (req, res) => {
+app.delete('/api/inquiries/:id', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     await Inquiry.findByIdAndDelete(req.params.id)
     res.json({ message: 'Inquiry Records Updated' })
   } catch (err) {
@@ -357,10 +295,8 @@ app.get('/api/loyalty/status/:email', async (req, res) => {
 })
 
 // PROTECTED: Get all loyalty members — Admin only
-app.get('/api/loyalty', auth, async (req, res) => {
+app.get('/api/loyalty', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     const members = await Loyalty.find().sort({ points: -1 }) // Highest-ranked first
     res.json(members)
   } catch (err) {
@@ -369,10 +305,8 @@ app.get('/api/loyalty', auth, async (req, res) => {
 })
 
 // PROTECTED: Award points to a member and increment project count — Admin only
-app.patch('/api/loyalty/:id/award', auth, async (req, res) => {
+app.patch('/api/loyalty/:id/award', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     const { points, projectCompleted } = req.body
     const member = await Loyalty.findById(req.params.id)
     if (!member) return res.status(404).json({ message: 'Member not found.' })
@@ -389,10 +323,8 @@ app.patch('/api/loyalty/:id/award', auth, async (req, res) => {
 })
 
 // PROTECTED: Remove a member from the Circle — Admin only
-app.delete('/api/loyalty/:id', auth, async (req, res) => {
+app.delete('/api/loyalty/:id', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
     await Loyalty.findByIdAndDelete(req.params.id)
     res.json({ message: 'Member Removed from Circle.' })
   } catch (err) {
@@ -403,11 +335,8 @@ app.delete('/api/loyalty/:id', auth, async (req, res) => {
 /* ---------------- LOYALTY FILE MANAGEMENT ---------------- */
 
 // PROTECTED: Add a file to a member — Admin only
-app.post('/api/loyalty/:id/files', [auth, upload.single('file')], async (req, res) => {
+app.post('/api/loyalty/:id/files', [adminAuth, upload.single('file')], async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
-    
     if (!req.file)
       return res.status(400).json({ message: 'No file provided.' })
 
@@ -420,7 +349,7 @@ app.post('/api/loyalty/:id/files', [auth, upload.single('file')], async (req, re
     })
     member.lastActivity = new Date()
     await member.save()
-    
+
     res.status(201).json(member)
   } catch (err) {
     res.status(500).json({ message: 'File upload failed.' })
@@ -428,17 +357,14 @@ app.post('/api/loyalty/:id/files', [auth, upload.single('file')], async (req, re
 })
 
 // PROTECTED: Remove a file from a member — Admin only
-app.delete('/api/loyalty/:id/files/:fileId', auth, async (req, res) => {
+app.delete('/api/loyalty/:id/files/:fileId', adminAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin')
-      return res.status(403).json({ message: 'Restricted Access' })
-
     const member = await Loyalty.findById(req.params.id)
     if (!member) return res.status(404).json({ message: 'Member not found.' })
 
     member.files = member.files.filter(f => f._id.toString() !== req.params.fileId)
     await member.save()
-    
+
     res.json(member)
   } catch (err) {
     res.status(500).json({ message: 'File removal failed.' })
