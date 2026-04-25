@@ -3,6 +3,8 @@ import { motion } from 'framer-motion' // Motion library for high-end staggered 
 import { useEffect, useState } from 'react' // React hooks for state and lifecycle
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom' // Navigation engine for the multiple pages (Admin vs Site)
 import Admin from './admin/Admin' // The Admin Dashboard component
+import Login from './admin/Login' // The Login component
+import ProtectedRoute from './components/ProtectedRoute' // Protected Route wrapper
 import LoyaltySection from './components/LoyaltySection' // The Circle loyalty programme section
 import ThreeHero from './components/ThreeHero' // The 3D Engine we built earlier
 
@@ -377,9 +379,14 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/admin" element={<Admin />} /> {/* Admin Panel Route */}
-        <Route path="/*" element={<MainSite />} />{' '}
-        {/* Default Main Site Route */}
+        {/* Protected Admin Routes */}
+        <Route element={<ProtectedRoute allowedRoles={['admin', 'manager']} />}>
+          <Route path="/admin" element={<Admin />} />
+        </Route>
+
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/*" element={<MainSite />} />
       </Routes>
     </Router>
   )

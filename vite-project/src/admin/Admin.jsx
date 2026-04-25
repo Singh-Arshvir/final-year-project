@@ -7,8 +7,6 @@ export default function Admin() {
     // STATE: Controlling what the admin sees
     const [token, setToken] = useState(localStorage.getItem('shahi_token')) // Persisted login 'passport'
     const [userRole, setUserRole] = useState(localStorage.getItem('shahi_role')) // User role from login
-    const [email, setEmail] = useState('') // Login email intake
-    const [password, setPassword] = useState('') // Login password intake
     const [view, setView] = useState('projects') // View toggle: 'projects', 'inquiries', or 'loyalty'
     const [data, setData] = useState([]) // Container for projects or enquiries fetched from DB
     const [loading, setLoading] = useState(false) // Spinner state for when data is being fetched
@@ -28,7 +26,7 @@ export default function Admin() {
 
     // LIFECYCLE: Automatically fetch data whenever the view (Projects/Inquiries) changes
     useEffect(() => {
-        if (token && userRole === 'admin') {
+        if (token && (userRole === 'admin' || userRole === 'manager')) {
             fetchData()
         }
     }, [token, view, userRole])
@@ -98,35 +96,13 @@ export default function Admin() {
         }
     }
 
-    // LOGIN ACTION: Exchanges credentials for a 24-hour Authorization Token and User Role
-    const handleLogin = async (e) => {
-        e.preventDefault()
-        try {
-            const res = await axios.post(`${API}/auth/login`, { email, password })
-            const { token, user } = res.data
-            
-            // SECURITY CHECK: Immediately reject if the user is not an admin
-            if (user.role !== 'admin') {
-                alert('ACCESS DENIED: You do not have permission to access the administrative panel.')
-                return
-            }
-
-            localStorage.setItem('shahi_token', token) // Saving the token
-            localStorage.setItem('shahi_role', user.role) // Saving the role
-            
-            setToken(token) 
-            setUserRole(user.role)
-        } catch (err) {
-            alert('Security Error: ' + (err.response?.data?.message || 'Check your credentials.'))
-        }
-    }
-
     // LOGOUT ACTION: Wipes all session data
     const handleLogout = () => {
         localStorage.removeItem('shahi_token')
         localStorage.removeItem('shahi_role')
         setToken(null)
         setUserRole(null)
+        window.location.href = '/login' // Force redirect to login
     }
 
     // ADD PROJECT: Sends new architectural data to your database
@@ -202,57 +178,13 @@ export default function Admin() {
 
 
 
-    // CONDITIONAL RENDER: If not logged in, show the minimalist login gate
-    if (!token) {
-        return (
-            <div className="min-h-screen bg-paper flex items-center justify-center p-6 sm:p-12">
-                <div className="w-full max-w-sm border border-ink/5 p-8 sm:p-12 bg-white shadow-2xl relative">
-                    <div className="absolute top-0 left-0 w-full h-[2px] bg-gold"></div>
-                    <h2 className="text-xl font-bold uppercase tracking-[0.4em] mb-12 text-ink text-center underline decoration-gold/20 underline-offset-8">Admin Access</h2>
-                    <form onSubmit={handleLogin} className="flex flex-col gap-8">
-                        <input 
-                            type="email" 
-                            placeholder="EMAIL" 
-                            className="bg-transparent border-b border-ink/10 py-3 text-xs font-bold tracking-widest outline-none focus:border-gold transition-colors"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                        <input 
-                            type="password" 
-                            placeholder="PASSWORD" 
-                            className="bg-transparent border-b border-ink/10 py-3 text-xs font-bold tracking-widest outline-none focus:border-gold transition-colors"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
-                        <button className="bg-ink text-white py-4 font-bold uppercase text-[9px] tracking-[0.5em] hover:bg-gold transition-all duration-500 shadow-lg">
-                            Enter Dashboard
-                        </button>
-                    </form>
-                </div>
-            </div>
-        )
-    }
-
-    // SECURITY FALLBACK: If a token exists but the role is wrong, block the view
-    if (userRole !== 'admin') {
-        return (
-            <div className="min-h-screen bg-paper flex items-center justify-center">
-                <div className="text-center p-20 border border-ink/5 bg-white shadow-xl">
-                    <h1 className="text-xl font-bold uppercase tracking-[0.5em] text-red-500 mb-6">Restricted Access</h1>
-                    <p className="text-[10px] font-bold tracking-widest text-ink/40 uppercase mb-10">You do not have the necessary permissions to view this system.</p>
-                    <button onClick={handleLogout} className="px-8 py-3 bg-ink text-white text-[9px] font-bold uppercase tracking-widest">Return to Safety</button>
-                </div>
-            </div>
-        )
-    }
-
-    // MAIN RENDER: The Architectural Command Centre (Admin Only)
+    // MAIN RENDER: The Architectural Command Centre (Admin/Manager Dashboard)
     return (
         <div className="min-h-screen bg-paper flex flex-col selection:bg-gold selection:text-white">
             {/* NAVIGATION HEADER */}
             <div className="flex flex-col sm:flex-row justify-between items-center px-6 sm:px-12 py-6 sm:py-8 border-b border-ink/5 bg-white gap-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
-                    <h1 className="text-[10px] font-bold tracking-[0.6em] uppercase text-ink underline decoration-gold underline-offset-4 select-none">Admin / Shahi Studio</h1>
+                    <h1 className="text-[10px] font-bold tracking-[0.6em] uppercase text-ink underline decoration-gold underline-offset-4 select-none">Dashboard / Shahi Studio</h1>
                     <div className="flex gap-8">
                         <button
                             onClick={() => setView('projects')}
