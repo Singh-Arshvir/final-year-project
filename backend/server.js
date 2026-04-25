@@ -57,7 +57,7 @@ const userSchema = new mongoose.Schema({
 
 // Blueprint for an Architectural Project (Name, Location, Image)
 const projectSchema = new mongoose.Schema({
-  id: String, // Technical ID (e.g. '01')
+  projectId: String, // Technical ID (e.g. '01')
   name: String, // Bold Project Title
   location: String, // Site Location
   image: String, // URL/Path to the render
