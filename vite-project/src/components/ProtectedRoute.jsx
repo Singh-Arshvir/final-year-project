@@ -11,7 +11,7 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
 
   // 1. If no token exists, the user is not logged in.
   if (!token) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // 2. If specific roles are required, check if the user has one of them.
