@@ -8,6 +8,8 @@
   
   --animate-fade-up: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   --animate-mask-reveal: maskReveal 1.2s cubic-bezier(0.83, 0, 0.17, 1) forwards;
+  --animate-shimmer: shimmer 3s infinite linear;
+  --animate-float: float 6s ease-in-out infinite;
 }
 
 @keyframes fadeInUp {
@@ -20,6 +22,16 @@
   to { clip-path: inset(0 0 0 0); }
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
 @layer base {
   body {
     @apply bg-paper text-ink antialiased overflow-x-hidden p-0 m-0 font-sans leading-relaxed;
@@ -27,6 +39,31 @@
 
   ::selection {
     @apply bg-ink text-white;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/40 backdrop-blur-xl border border-white/20 shadow-2xl;
+  }
+  
+  .glass-dark {
+    @apply bg-ink/80 backdrop-blur-xl border border-white/5 shadow-2xl;
+  }
+
+  .text-shimmer {
+    background: linear-gradient(90deg, #b38b1f 0%, #ffd700 50%, #b38b1f 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    @apply animate-shimmer;
+  }
+
+  .architectural-grid {
+    background-image: 
+      linear-gradient(to right, rgba(26, 29, 31, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(26, 29, 31, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
   }
 }
 
