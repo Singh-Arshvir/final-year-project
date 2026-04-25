@@ -10,6 +10,14 @@ import mongoose from 'mongoose' // The middleman between this code and your Mong
 
 dotenv.config() // Activating Environment Variables from .env
 
+/* ---------------- ENVIRONMENT VALIDATION ---------------- */
+const requiredEnv = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'MONGO_URI', 'JWT_SECRET']
+const missingEnv = requiredEnv.filter(key => !process.env[key])
+if (missingEnv.length > 0) {
+  console.warn('⚠️ WARNING: Missing Environment Variables:', missingEnv.join(', '))
+  console.warn('Check your .env file or hosting provider settings.')
+}
+
 const app = express() // Initialising the Express app
 app.use(cors()) // Enabling CORS so your React app fits perfectly with this API
 app.use(express.json()) // Middleware: allows the server to read incoming JSON data (form submissions)
@@ -25,8 +33,9 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'shahi_architects',
-    resource_type: 'auto', // Automatically handle images, PDFs, etc.
-    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'pdf']
+    resource_type: 'auto',
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'pdf'],
+    public_id: (req, file) => `draft_${Date.now()}_${file.originalname.split('.')[0]}`
   }
 })
 const upload = multer({ storage })
@@ -452,7 +461,7 @@ app.use((err, req, res, next) => {
   console.error('FATAL:', err.stack)
   res.status(500).json({
     message: 'Architecture Fault: Something went wrong on our end.',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    error: err.message // Temporarily enabled for remote debugging
   })
 })
 
