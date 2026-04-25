@@ -12,6 +12,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api' // Fallb
 
 // SIDEBAR COMPONENT: Handles the fixed navigation frame for Desktop and Mobile
 function Sidebar() {
+  const isLoggedIn = !!localStorage.getItem('shahi_token')
   return (
     <>
       {/* Desktop Navigation: Fixed vertical bar with 'writing-mode' text */}
@@ -48,6 +49,22 @@ function Sidebar() {
           >
             Contact
           </a>
+          <div className="w-[1px] h-6 bg-ink/10 my-2"></div>
+          {isLoggedIn ? (
+            <a
+              href="/admin"
+              className="text-gold transition-colors [writing-mode:vertical-lr] rotate-180 font-bold"
+            >
+              Dashboard
+            </a>
+          ) : (
+            <a
+              href="/login"
+              className="hover:text-gold transition-colors [writing-mode:vertical-lr] rotate-180 font-bold"
+            >
+              Login
+            </a>
+          )}
         </div>
       </div>
 
@@ -66,6 +83,15 @@ function Sidebar() {
           <a href="#contact" className="hover:text-gold transition-colors">
             Contact
           </a>
+          {isLoggedIn ? (
+            <a href="/admin" className="text-gold transition-colors">
+              Dash
+            </a>
+          ) : (
+            <a href="/login" className="hover:text-gold transition-colors">
+              Login
+            </a>
+          )}
         </div>
       </div>
     </>
