@@ -52,7 +52,12 @@ mongoose
 
 /* ---------------- MONITORING ROUTES ---------------- */
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'active', timestamp: new Date() })
+  res.status(200).json({ 
+    status: 'active', 
+    timestamp: new Date(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    environment: process.env.NODE_ENV || 'development'
+  })
 })
 
 /* ---------------- DATA MODELS ---------------- */
