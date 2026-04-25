@@ -129,20 +129,68 @@ function auth(req, res, next) {
   }
 }
 
-// Dedicated middleware for ADMIN ONLY actions
-function adminAuth(req, res, next) {
-  auth(req, res, () => {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Restricted Access: Administrative Privileges Required' })
-    }
-    next()
-  })
+// Flexible middleware for role-based access control
+function authorize(roles = []) {
+  if (typeof roles === 'string') {
+    roles = [roles]
+  }
+
+  return (req, res, next) => {
+    auth(req, res, () => {
+      if (roles.length && !roles.includes(req.user.role)) {
+        return res.status(403).json({
+          message: `Restricted Access: ${roles.join(' or ')} Privileges Required`
+        })
+      }
+      next()
+    })
+  }
 }
+
+// Shorthand for admin-only actions
+const adminAuth = authorize('admin')
 
 /* ---------------- AUTH ROUTES ---------------- */
 
-// NOTE: Registration is DISABLED for security.
-// Admin accounts must be created directly in the database or via seed script.
+// REGISTER: Create a new account (Defaults to 'user' role)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password } = req.body
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and Password are required.' })
+    }
+
+    const existingUser = await User.findOne({ email })
+    if (existingUser) {
+      return res.status(400).json({ message: 'Account already exists.' })
+    }
+
+    // Hash password for security
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
+    const newUser = await User.create({
+      email,
+      password: hashedPassword,
+      role: 'user' // Explicitly setting default, though schema also handles it
+    })
+
+    // Generate token for immediate login after registration
+    const token = jwt.sign(
+      { id: newUser._id, role: newUser.role },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    )
+
+    res.status(201).json({
+      token,
+      user: { email: newUser.email, role: newUser.role },
+      message: 'Account Created Successfully'
+    })
+  } catch (err) {
+    res.status(500).json({ message: 'Internal Server Error during registration.' })
+  }
+})
 
 // LOGIN: Exchanges email/password for a secure 24-hour Token
 app.post('/api/auth/login', async (req, res) => {
@@ -160,6 +208,17 @@ app.post('/api/auth/login', async (req, res) => {
   )
 
   res.json({ token, user: { email: user.email, role: user.role } })
+})
+
+// GET ME: Verifies the current token and returns user details
+app.get('/api/auth/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password')
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json(user)
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching user profile' })
+  }
 })
 
 /* ---------------- PROJECT MANAGEMENT ROUTES ---------------- */
