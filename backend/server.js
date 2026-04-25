@@ -25,7 +25,8 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'shahi_architects',
-    allowed_formats: ['jpg', 'png', 'jpeg', 'webp']
+    resource_type: 'auto', // Automatically handle images, PDFs, etc.
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'pdf']
   }
 })
 const upload = multer({ storage })
@@ -148,7 +149,8 @@ function authorize(roles = []) {
 }
 
 // Shorthand for admin-only actions
-const adminAuth = authorize('admin')
+// Shorthand for staff actions (Admin or Manager)
+const staffAuth = authorize(['admin', 'manager'])
 
 /* ---------------- AUTH ROUTES ---------------- */
 
@@ -169,17 +171,21 @@ app.post('/api/auth/register', async (req, res) => {
     const salt = await bcrypt.genSalt(10)
     const hashedPassword = await bcrypt.hash(password, salt)
 
+    // Check if this email is the one defined in .env as ADMIN_EMAIL
+    const isMainAdmin = email.toLowerCase() === process.env.ADMIN_EMAIL?.toLowerCase()
+    const role = isMainAdmin ? 'admin' : 'user'
+
     const newUser = await User.create({
       email,
       password: hashedPassword,
-      role: 'user' // Explicitly setting default, though schema also handles it
+      role: role
     })
 
     // Generate token for immediate login after registration
     const token = jwt.sign(
       { id: newUser._id, role: newUser.role },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '24h' } // Extended to 24h for better UX
     )
 
     res.status(201).json({
@@ -192,22 +198,32 @@ app.post('/api/auth/register', async (req, res) => {
   }
 })
 
-// LOGIN: Exchanges email/password for a secure 24-hour Token
+// LOGIN: Exchanges email/password for a secure Token
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body
-  const user = await User.findOne({ email }) // Finding user in the DB
-  if (!user) return res.status(400).json({ message: 'Account Not Found' })
+  try {
+    const { email, password } = req.body
+    const user = await User.findOne({ email }) // Finding user in the DB
+    if (!user) return res.status(400).json({ message: 'Account Not Found' })
 
-  const isMatch = await bcrypt.compare(password, user.password) // Comparing hashes
-  if (!isMatch) return res.status(400).json({ message: 'Invalid Credentials' })
+    const isMatch = await bcrypt.compare(password, user.password) // Comparing hashes
+    if (!isMatch) return res.status(400).json({ message: 'Invalid Credentials' })
 
-  const token = jwt.sign(
-    { id: user._id, role: user.role },
-    JWT_SECRET,
-    { expiresIn: '24h' } // Token expires in one day for security
-  )
+    // AUTO-PROMOTION: If this is the configured ADMIN_EMAIL, ensure they have the admin role
+    if (email.toLowerCase() === process.env.ADMIN_EMAIL?.toLowerCase() && user.role !== 'admin') {
+        user.role = 'admin'
+        await user.save()
+    }
 
-  res.json({ token, user: { email: user.email, role: user.role } })
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '24h' } // Extended to 24h for better UX
+    )
+
+    res.json({ token, user: { email: user.email, role: user.role } })
+  } catch (err) {
+    res.status(500).json({ message: 'Login processing error.' })
+  }
 })
 
 // GET ME: Verifies the current token and returns user details
@@ -233,8 +249,8 @@ app.get('/api/projects', async (req, res) => {
   }
 })
 
-// PROTECTED: Upload an Image (Admin Only)
-app.post('/api/upload', [adminAuth, upload.single('image')], (req, res) => {
+// PROTECTED: Upload an Image (Staff Only)
+app.post('/api/upload', [staffAuth, upload.single('image')], (req, res) => {
   try {
     if (!req.file)
       return res.status(400).json({ message: 'No file provided.' })
@@ -242,27 +258,28 @@ app.post('/api/upload', [adminAuth, upload.single('image')], (req, res) => {
     // Cloudinary returns the secure URL via req.file.path
     res.status(201).json({ imageUrl: req.file.path })
   } catch (err) {
-    res.status(500).json({ message: 'Error uploading image.' })
+    console.error('Upload Error:', err)
+    res.status(500).json({ message: 'Cloudinary Upload Failed: ' + err.message })
   }
 })
 
-// PROTECTED: Add a new project (Admin Only)
-app.post('/api/projects', adminAuth, async (req, res) => {
+// PROTECTED: Add a new project (Staff Only)
+app.post('/api/projects', staffAuth, async (req, res) => {
   try {
     const project = await Project.create(req.body)
     res.status(201).json(project)
   } catch (err) {
-    res.status(400).json({ message: 'Error creating project' })
+    res.status(400).json({ message: 'Database Error: Could not save project details.' })
   }
 })
 
-// PROTECTED: Remove a project (Admin Only)
-app.delete('/api/projects/:id', adminAuth, async (req, res) => {
+// PROTECTED: Remove a project (Staff Only)
+app.delete('/api/projects/:id', staffAuth, async (req, res) => {
   try {
     await Project.findByIdAndDelete(req.params.id)
     res.json({ message: 'Project Successfully Deleted' })
   } catch (err) {
-    res.status(400).json({ message: 'Error deleting project' })
+    res.status(400).json({ message: 'Delete Operation Failed' })
   }
 })
 
@@ -278,8 +295,8 @@ app.post('/api/inquiries', async (req, res) => {
   }
 })
 
-// PROTECTED: Get all leads (Admin Only)
-app.get('/api/inquiries', adminAuth, async (req, res) => {
+// PROTECTED: Get all leads (Staff Only)
+app.get('/api/inquiries', staffAuth, async (req, res) => {
   try {
     const inquiries = await Inquiry.find().sort({ createdAt: -1 })
     res.json(inquiries)
@@ -288,8 +305,8 @@ app.get('/api/inquiries', adminAuth, async (req, res) => {
   }
 })
 
-// PROTECTED: Clear an inquiry record (Admin Only)
-app.delete('/api/inquiries/:id', adminAuth, async (req, res) => {
+// PROTECTED: Clear an inquiry record (Staff Only)
+app.delete('/api/inquiries/:id', staffAuth, async (req, res) => {
   try {
     await Inquiry.findByIdAndDelete(req.params.id)
     res.json({ message: 'Inquiry Records Updated' })
@@ -353,8 +370,8 @@ app.get('/api/loyalty/status/:email', async (req, res) => {
   }
 })
 
-// PROTECTED: Get all loyalty members — Admin only
-app.get('/api/loyalty', adminAuth, async (req, res) => {
+// PROTECTED: Get all loyalty members — Staff only
+app.get('/api/loyalty', staffAuth, async (req, res) => {
   try {
     const members = await Loyalty.find().sort({ points: -1 }) // Highest-ranked first
     res.json(members)
@@ -363,8 +380,8 @@ app.get('/api/loyalty', adminAuth, async (req, res) => {
   }
 })
 
-// PROTECTED: Award points to a member and increment project count — Admin only
-app.patch('/api/loyalty/:id/award', adminAuth, async (req, res) => {
+// PROTECTED: Award points to a member and increment project count — Staff only
+app.patch('/api/loyalty/:id/award', staffAuth, async (req, res) => {
   try {
     const { points, projectCompleted } = req.body
     const member = await Loyalty.findById(req.params.id)
@@ -381,8 +398,8 @@ app.patch('/api/loyalty/:id/award', adminAuth, async (req, res) => {
   }
 })
 
-// PROTECTED: Remove a member from the Circle — Admin only
-app.delete('/api/loyalty/:id', adminAuth, async (req, res) => {
+// PROTECTED: Remove a member from the Circle — Staff only
+app.delete('/api/loyalty/:id', staffAuth, async (req, res) => {
   try {
     await Loyalty.findByIdAndDelete(req.params.id)
     res.json({ message: 'Member Removed from Circle.' })
@@ -393,8 +410,8 @@ app.delete('/api/loyalty/:id', adminAuth, async (req, res) => {
 
 /* ---------------- LOYALTY FILE MANAGEMENT ---------------- */
 
-// PROTECTED: Add a file to a member — Admin only
-app.post('/api/loyalty/:id/files', [adminAuth, upload.single('file')], async (req, res) => {
+// PROTECTED: Add a file to a member — Staff only
+app.post('/api/loyalty/:id/files', [staffAuth, upload.single('file')], async (req, res) => {
   try {
     if (!req.file)
       return res.status(400).json({ message: 'No file provided.' })
@@ -415,8 +432,8 @@ app.post('/api/loyalty/:id/files', [adminAuth, upload.single('file')], async (re
   }
 })
 
-// PROTECTED: Remove a file from a member — Admin only
-app.delete('/api/loyalty/:id/files/:fileId', adminAuth, async (req, res) => {
+// PROTECTED: Remove a file from a member — Staff only
+app.delete('/api/loyalty/:id/files/:fileId', staffAuth, async (req, res) => {
   try {
     const member = await Loyalty.findById(req.params.id)
     if (!member) return res.status(404).json({ message: 'Member not found.' })
@@ -428,6 +445,15 @@ app.delete('/api/loyalty/:id/files/:fileId', adminAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: 'File removal failed.' })
   }
+})
+
+/* ---------------- GLOBAL ERROR HANDLER ---------------- */
+app.use((err, req, res, next) => {
+  console.error('FATAL:', err.stack)
+  res.status(500).json({
+    message: 'Architecture Fault: Something went wrong on our end.',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  })
 })
 
 /* ---------------- SERVER LIFTOFF ---------------- */
