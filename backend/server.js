@@ -463,10 +463,12 @@ app.delete('/api/loyalty/:id/files/:fileId', staffAuth, async (req, res) => {
 
 /* ---------------- GLOBAL ERROR HANDLER ---------------- */
 app.use((err, req, res, next) => {
-  console.error('FATAL:', err.stack)
-  res.status(500).json({
+  const errorDetails = err instanceof Error ? err.stack : JSON.stringify(err)
+  console.error('ARCHITECTURAL FAULT:', errorDetails)
+  
+  res.status(err.status || 500).json({
     message: 'Architecture Fault: Something went wrong on our end.',
-    error: err.message // Temporarily enabled for remote debugging
+    error: err.message || 'Unknown Internal Error'
   })
 })
 
